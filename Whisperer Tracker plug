@@ -1,0 +1,92 @@
+package com.yourname.whisperertracker;
+
+import net.runelite.api.Client;
+import net.runelite.api.NPC;
+import net.runelite.api.NpcID;
+import net.runelite.api.events.GameTick;
+import net.runelite.api.events.NpcChanged;
+import net.runelite.api.events.NpcSpawned;
+import net.runelite.api.events.NpcDespawned;
+import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.util.Notifier;
+
+import javax.inject.Inject;
+import java.util.HashMap;
+import java.util.Map;
+
+@PluginDescriptor(
+    name = "Whisperer Tracker",
+    description = "Alerts when the Whisperer is about to perform a special attack.",
+    tags = {"whisperer", "tracker", "boss"}
+)
+public class WhispererTrackerPlugin extends Plugin {
+
+    @Inject
+    private Client client;
+
+    @Inject
+    private OverlayManager overlayManager;
+
+    @Inject
+    private WhispererTrackerOverlay overlay;
+
+    @Inject
+    private Notifier notifier;
+
+    private final Map<Integer, NPC> whisperers = new HashMap<>();
+
+    private static final int[] THRESHOLDS = {720, 495, 270};
+
+    @Override
+    protected void startUp() throws Exception {
+        overlayManager.add(overlay);
+    }
+
+    @Override
+    protected void shutDown() throws Exception {
+        overlayManager.remove(overlay);
+        whisperers.clear();
+    }
+
+    @Subscribe
+    public void onNpcSpawned(NpcSpawned event) {
+        NPC npc = event.getNpc();
+        if (npc.getId() == NpcID.WHISPERER) {
+            whisperers.put(npc.getIndex(), npc);
+        }
+    }
+
+    @Subscribe
+    public void onNpcDespawned(NpcDespawned event) {
+        whisperers.remove(event.getNpc().getIndex());
+    }
+
+    @Subscribe
+    public void onNpcChanged(NpcChanged event) {
+        NPC npc = event.getNpc();
+        if (npc.getId() == NpcID.WHISPERER) {
+            whisperers.put(npc.getIndex(), npc);
+        } else {
+            whisperers.remove(npc.getIndex());
+        }
+    }
+
+    @Subscribe
+    public void onGameTick(GameTick event) {
+        for (NPC whisperer : whisperers.values()) {
+            int currentHealth = whisperer.getHealthRatio();
+            for (int threshold : THRESHOLDS) {
+                if (currentHealth == threshold) {
+                    notifier.notify("Whisperer is about to perform a special attack!");
+                    overlay.setThresholdReached(true);
+                    break;
+                } else {
+                    overlay.setThresholdReached(false);
+                }
+            }
+        }
+    }
+}
